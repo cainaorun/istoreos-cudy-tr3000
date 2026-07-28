@@ -43,8 +43,7 @@ jobs:
           git clone --depth 1 https://github.com/jerrykuku/luci-app-argon-config.git package/luci-app-argon-config
           sed -i 's/luci-theme-bootstrap/luci-theme-argon/g' feeds/luci/collections/luci/Makefile
           cp /github/workspace/config/512m.config .config
-          echo 'CONFIG_PACKAGE_istoreos-files=y' >> .config
-          make defconfig
+                    make defconfig
 
       - name: Download
         run: cd openwrt && make -j$(nproc) download
