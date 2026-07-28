@@ -1,5 +1,7 @@
 name: iStoreOS Builder
 on: workflow_dispatch
+permissions:
+  contents: write
 jobs:
   build:
     runs-on: ubuntu-22.04
@@ -8,9 +10,10 @@ jobs:
       - run: sudo apt-get update -qq && sudo apt-get install -y --no-install-recommends build-essential g++ gawk gettext git libncurses-dev libssl-dev make python3 rsync subversion swig unzip wget xsltproc zlib1g-dev
       - run: git clone --depth 1 --single-branch -b openwrt-24.10-6.6 https://github.com/padavanonly/immortalwrt-mt798x-6.6.git openwrt
       - run: if [ -d files ]; then cp -af files/* openwrt/files/ 2>/dev/null || true; fi
-      - run: cd openwrt && python3 -c "exec(__import__('base64').b64decode('aW1wb3J0IGpzb24KZGF0YT1qc29uLmxvYWQob3Blbignc2NyaXB0cy9wcm9qZWN0c21pcnJvcnMuanNvbicpKQpmb3Iga2V5IGluIGxpc3QoZGF0YS5rZXlzKCkpOgogIGRhdGFba2V5XT1bdSBmb3IgdSBpbiBkYXRhW2tleV0gaWYgJy5jbicgbm90IGluIHVdCmRhdGFbJ0BLRVJORUwnXT1bJ2h0dHBzOi8vY2RuLmtlcm5lbC5vcmcvcHViJ10KanNvbi5kdW1wKGRhdGEsb3BlbihwLCd3Jykp').decode())" p=scripts/projectsmirrors.json
+      - run: cd openwrt && sed -i "s/ustc.edu.cn/cdn.kernel.org/g; s/mirror.iscas.ac.cn/cdn.kernel.org/g; s/tuna.tsinghua.edu.cn/cdn.kernel.org/g" scripts/projectsmirrors.json && cat scripts/projectsmirrors.json | head -5
+        continue-on-error: true
       - run: cd openwrt && echo 'src-git store https://github.com/linkease/istore.git;main' >> feeds.conf.default && echo 'src-git third https://github.com/jjm2473/openwrt-third.git;main' >> feeds.conf.default && ./scripts/feeds update -a && ./scripts/feeds install -a
-      - run: cd openwrt && git clone --depth 1 https://github.com/jerrykuku/luci-theme-argon.git package/luci-theme-argon && git clone --depth 1 https://github.com/jerrykuku/luci-app-argon-config.git package/luci-app-argon-config && sed -i 's/luci-theme-bootstrap/luci-theme-argon/g' feeds/luci/collections/luci/Makefile && cp $GITHUB_WORKSPACE/config/512m.config .config && make defconfig
+      - run: cd openwrt && git clone --depth 1 https://github.com/jerrykuku/luci-theme-argon.git package/luci-theme-argon && git clone --depth 1 https://github.com/jerrykuku/luci-app-argon-config.git package/luci-app-argon-config && sed -i 's/luci-theme-bootstrap/luci-theme-argon/g' feeds/luci/collections/luci/Makefile && cp ${{ github.workspace }}/config/512m.config .config && make defconfig
       - run: cd openwrt && make download -j4 V=s
         continue-on-error: true
         timeout-minutes: 120
@@ -24,7 +27,7 @@ jobs:
       - uses: ncipollo/release-action@v1
         if: success()
         with:
-          tag: build-1
+          tag: build-2
           name: iStoreOS Cudy TR3000
           artifacts: openwrt/bin/targets/mediatek/filogic/*.bin
           token: ${{ secrets.GITHUB_TOKEN }}
