@@ -10,7 +10,7 @@ env:
 
 jobs:
   build:
-    name: Build
+    name: Build iStoreOS
     runs-on: ubuntu-22.04
     steps:
       - uses: actions/checkout@v4
@@ -18,6 +18,12 @@ jobs:
         run: sudo apt-get update -qq && sudo apt-get install -y --no-install-recommends build-essential g++ gawk gettext git libncurses-dev libssl-dev make python3 rsync subversion swig unzip wget xsltproc zlib1g-dev
       - name: Clone
         run: git clone --depth 1 --single-branch -b $REPO_BRANCH $REPO_URL openwrt
+      - name: Copy iStoreOS files
+        run: |
+          if [ -d files ]; then
+            cp -af files/* openwrt/files/ 2>/dev/null || true
+            echo "Custom files copied"
+          fi
       - name: Feeds
         run: |
           cd openwrt
@@ -32,25 +38,27 @@ jobs:
           git clone --depth 1 https://github.com/jerrykuku/luci-app-argon-config.git package/luci-app-argon-config
           sed -i 's/luci-theme-bootstrap/luci-theme-argon/g' feeds/luci/collections/luci/Makefile
           cp /github/workspace/config/512m.config .config
+          echo 'CONFIG_PACKAGE_istoreos-files=y' >> .config
           make defconfig
       - name: Download
         run: cd openwrt && make -j$(nproc) download
       - name: Build
         run: cd openwrt && make -j$(nproc) || make -j1 V=s
-      - name: Create Release
-        run: |
-          cd openwrt/bin/targets/mediatek/filogic/
-          echo "iStoreOS for Cudy TR3000" > release.txt
-          echo "Build date: $(date '+%Y-%m-%d %H:%M')" >> release.txt
-      - name: Upload to Release
+      - name: Upload Artifacts
+        uses: actions/upload-artifact@v4
+        with:
+          name: iStoreOS-CudyTR3000
+          path: openwrt/bin/targets/mediatek/filogic/
+      - name: Release
         uses: ncipollo/release-action@v1
         with:
           tag: build-$(date +%Y%m%d-%H%M)
           name: iStoreOS Cudy TR3000 $(date +%Y%m%d)
           body: |
-            iStoreOS for Cudy TR3000 自动编译
+            iStoreOS for Cudy TR3000
             基于 padavanonly/immortalwrt-mt798x-6.6
-          artifacts: openwrt/bin/targets/mediatek/filogic/*
+            包含: iStore商店 + Argon主题 + EasePi面板 + 全套驱动
+          artifacts: "openwrt/bin/targets/mediatek/filogic/*.bin,openwrt/bin/targets/mediatek/filogic/*.itb,openwrt/bin/targets/mediatek/filogic/*.tar"
           token: ${{ secrets.GITHUB_TOKEN }}
           allowUpdates: true
           removeArtifacts: true
