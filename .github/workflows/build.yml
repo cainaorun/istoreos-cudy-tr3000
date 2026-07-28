@@ -2,6 +2,9 @@ name: Build iStoreOS
 
 on: workflow_dispatch
 
+env:
+  FORCE_UNSAFE_CONFIGURE: 1
+
 jobs:
   build:
     runs-on: ubuntu-22.04
@@ -36,22 +39,22 @@ jobs:
           git clone --depth 1 https://github.com/jerrykuku/luci-theme-argon.git package/luci-theme-argon
           git clone --depth 1 https://github.com/jerrykuku/luci-app-argon-config.git package/luci-app-argon-config
           sed -i 's/luci-theme-bootstrap/luci-theme-argon/g' feeds/luci/collections/luci/Makefile
-          cp ${{ github.workspace }}/config/512m.config .config
+          cp \${{ github.workspace }}/config/512m.config .config
           make defconfig
       
       - name: Download
         run: cd openwrt && make -j$(nproc) download V=s
+        continue-on-error: true
         timeout-minutes: 60
+      
+      - name: Download retry
+        if: failure()
+        run: cd openwrt && make download V=s
+        timeout-minutes: 120
       
       - name: Build
         run: cd openwrt && make -j$(nproc) V=s
         timeout-minutes: 240
-      
-      - name: Check output
-        id: check
-        run: |
-          ls -la openwrt/bin/targets/mediatek/filogic/ 2>/dev/null || echo "No output dir"
-          echo "files=$(ls openwrt/bin/targets/mediatek/filogic/*.bin 2>/dev/null | wc -l)" >> $GITHUB_OUTPUT
       
       - uses: actions/upload-artifact@v4
         if: always()
@@ -60,14 +63,14 @@ jobs:
           path: openwrt/bin/targets/mediatek/filogic/
       
       - uses: ncipollo/release-action@v1
-        if: steps.check.outputs.files > 0
+        if: success()
         with:
           tag: build-$(date +%Y%m%d-%H%M)
           name: iStoreOS Cudy TR3000 $(date +%Y%m%d)
-          artifacts: "openwrt/bin/targets/mediatek/filogic/*.bin,openwrt/bin/targets/mediatek/filogic/*.itb"
-          token: ${{ secrets.GITHUB_TOKEN }}
+          artifacts: "openwrt/bin/targets/mediatek/filogic/*.bin"
+          token: \${{ secrets.GITHUB_TOKEN }}
       
-      - if: success() && steps.check.outputs.files > 0
+      - if: success()
         run: |
           TAG="build-$(date +%Y%m%d-%H%M)"
           curl -X POST "https://push.xrdp.fun:3443/api/push/e0eea2dc719f4ba8ba6fd443fc276463" \
@@ -78,4 +81,4 @@ jobs:
         run: |
           curl -X POST "https://push.xrdp.fun:3443/api/push/e0eea2dc719f4ba8ba6fd443fc276463" \
             -H "Content-Type: application/json" \
-            -d "{\"title\":\"iStoreOS 编译失败\",\"content\":\"Cudy TR3000 编译失败\\nhttps://github.com/cainaorun/istoreos-cudy-tr3000/actions/runs/${{ github.run_id }}\",\"type\":\"text\"}"
+            -d "{\"title\":\"iStoreOS 编译失败\",\"content\":\"Cudy TR3000 编译失败\\nhttps://github.com/cainaorun/istoreos-cudy-tr3000/actions/runs/\${{ github.run_id }}\",\"type\":\"text\"}"
