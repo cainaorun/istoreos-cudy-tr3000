@@ -43,17 +43,21 @@ jobs:
           make defconfig
       
       - name: Download
-        run: cd openwrt && make -j$(nproc) download V=s
-        continue-on-error: true
-        timeout-minutes: 60
-      
-      - name: Download retry
-        if: failure()
-        run: cd openwrt && make download V=s
+        run: |
+          cd openwrt
+          # Retry download up to 3 times with different mirrors
+          for i in 1 2 3; do
+            echo "=== Download attempt \$i ==="
+            make -j\$(nproc) download V=s && break
+            # On failure, add more mirrors and retry
+            echo "DOWNLOAD_MIRROR=https://sources.cdn.openwrt.org" >> .config
+            echo "DOWNLOAD_MIRROR=https://mirrors.aliyun.com/openwrt" >> .config
+            sleep 10
+          done
         timeout-minutes: 120
       
       - name: Build
-        run: cd openwrt && make -j$(nproc) V=s
+        run: cd openwrt && make -j\$(nproc) V=s
         timeout-minutes: 240
       
       - uses: actions/upload-artifact@v4
@@ -65,17 +69,17 @@ jobs:
       - uses: ncipollo/release-action@v1
         if: success()
         with:
-          tag: build-$(date +%Y%m%d-%H%M)
-          name: iStoreOS Cudy TR3000 $(date +%Y%m%d)
+          tag: build-\$(date +%Y%m%d-%H%M)
+          name: iStoreOS Cudy TR3000 \$(date +%Y%m%d)
           artifacts: "openwrt/bin/targets/mediatek/filogic/*.bin"
           token: \${{ secrets.GITHUB_TOKEN }}
       
       - if: success()
         run: |
-          TAG="build-$(date +%Y%m%d-%H%M)"
+          TAG="build-\$(date +%Y%m%d-%H%M)"
           curl -X POST "https://push.xrdp.fun:3443/api/push/e0eea2dc719f4ba8ba6fd443fc276463" \
             -H "Content-Type: application/json" \
-            -d "{\"title\":\"iStoreOS 编译成功\",\"content\":\"Cudy TR3000 固件已发布\\nhttps://github.com/cainaorun/istoreos-cudy-tr3000/releases/tag/$TAG\",\"type\":\"text\"}"
+            -d "{\"title\":\"iStoreOS 编译成功\",\"content\":\"Cudy TR3000 固件已发布\\nhttps://github.com/cainaorun/istoreos-cudy-tr3000/releases/tag/\$TAG\",\"type\":\"text\"}"
       
       - if: failure()
         run: |
