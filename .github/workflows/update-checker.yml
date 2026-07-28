@@ -99,3 +99,4 @@ with open('scripts/projectsmirrors.json', 'w') as f:
           curl -X POST "https://push.xrdp.fun:3443/api/push/e0eea2dc719f4ba8ba6fd443fc276463" \
             -H "Content-Type: application/json" \
             -d '{"title":"iStoreOS 编译失败","content":"Cudy TR3000 编译失败\\nhttps://github.com/cainaorun/istoreos-cudy-tr3000/actions/runs/${{ github.run_id }}","type":"text"}'
+
