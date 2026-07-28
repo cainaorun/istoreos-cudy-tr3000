@@ -14,9 +14,9 @@ jobs:
       - name: Install deps
         run: |
           sudo apt-get update -qq
-          sudo apt-get install -y --no-install-recommends build-essential g++ gawk gettext git libncurses-dev libssl-dev make python3 rsync subversion swig unzip wget xsltproc zlib1g-dev pigz
+          sudo apt-get install -y --no-install-recommends build-essential g++ gawk gettext git libncurses-dev libssl-dev make python3 rsync subversion swig unzip wget xsltproc zlib1g-dev
 
-      - name: Clone
+      - name: Clone source
         run: git clone --depth 1 --single-branch -b openwrt-24.10-6.6 https://github.com/padavanonly/immortalwrt-mt798x-6.6.git openwrt
 
       - name: Copy files
@@ -28,28 +28,21 @@ jobs:
       - name: Fix mirrors (global CDN first)
         run: |
           cd openwrt
-          # Replace @KERNEL mirrors with global CDN first
-          python3 -c "
-import json
-with open('scripts/projectsmirrors.json') as f:
-    d = json.load(f)
-d['@KERNEL'] = [x for x in d['@KERNEL'] if 'ustc' not in x and 'iscas' not in x]
-d['@KERNEL'].insert(0, 'https://cdn.kernel.org/pub')
-print('KERNEL mirrors:', d['@KERNEL'][:3])
-with open('scripts/projectsmirrors.json', 'w') as f:
-    json.dump(d, f, indent=2)
-"
-          # Same for @GNOME, @GNU etc
           python3 -c "
 import json
 with open('scripts/projectsmirrors.json') as f:
     d = json.load(f)
 for key in d:
-    d[key] = [x for x in d[key] if 'ustc' not in x and 'iscas' not in x and 'tuna' not in x]
+    d[key] = [x for x in d[key] if 'ustc' not in x and 'iscas' not in x and 'tuna' not in x and 'aliyun' not in x]
+import os
+for k in d:
+    for i, url in enumerate(d[k]):
+        if '.edu.cn' in url:
+            d[k][i] = url.replace(url, 'https://cdn.kernel.org/pub')
 with open('scripts/projectsmirrors.json', 'w') as f:
     json.dump(d, f, indent=2)
+print('Fixed all mirrors')
 "
-          echo "Mirrors fixed"
 
       - name: Feeds
         run: |
@@ -68,10 +61,24 @@ with open('scripts/projectsmirrors.json', 'w') as f:
           cp \${{ github.workspace }}/config/512m.config .config
           make defconfig
 
+      - name: Restore dl cache
+        id: cache-dl
+        uses: actions/cache/restore@v4
+        with:
+          path: openwrt/dl
+          key: dl-cache-\${{ hashFiles('openwrt/dl') }}
+
       - name: Download
         continue-on-error: true
         run: cd openwrt && make download -j4 V=s
         timeout-minutes: 120
+
+      - name: Save dl cache
+        uses: actions/cache/save@v4
+        if: always()
+        with:
+          path: openwrt/dl
+          key: dl-cache-\${{ hashFiles('openwrt/dl') }}
 
       - name: Build
         run: cd openwrt && make -j4 V=s
@@ -86,20 +93,19 @@ with open('scripts/projectsmirrors.json', 'w') as f:
       - uses: ncipollo/release-action@v1
         if: success()
         with:
-          tag: build-\$(date +%Y%m%d-%H%M)
-          name: iStoreOS Cudy TR3000 \$(date +%Y%m%d)
+          tag: build-\${{ github.run_number }}
+          name: iStoreOS Cudy TR3000
           artifacts: "openwrt/bin/targets/mediatek/filogic/*.bin"
           token: \${{ secrets.GITHUB_TOKEN }}
 
       - if: success()
         run: |
-          TAG="build-\$(date +%Y%m%d-%H%M)"
           curl -X POST "https://push.xrdp.fun:3443/api/push/e0eea2dc719f4ba8ba6fd443fc276463" \
             -H "Content-Type: application/json" \
-            -d "{\"title\":\"iStoreOS 编译成功\",\"content\":\"Cudy TR3000 固件已发布\\nhttps://github.com/cainaorun/istoreos-cudy-tr3000/releases/tag/\$TAG\",\"type\":\"text\"}"
+            -d '{"title":"iStoreOS 编译成功","content":"Cudy TR3000 固件已发布\nhttps://github.com/cainaorun/istoreos-cudy-tr3000/releases/tag/build-${{ github.run_number }}","type":"text"}'
 
       - if: failure()
         run: |
           curl -X POST "https://push.xrdp.fun:3443/api/push/e0eea2dc719f4ba8ba6fd443fc276463" \
             -H "Content-Type: application/json" \
-            -d "{\"title\":\"iStoreOS 编译失败\",\"content\":\"Cudy TR3000 编译失败\\nhttps://github.com/cainaorun/istoreos-cudy-tr3000/actions/runs/\${{ github.run_id }}\",\"type\":\"text\"}"
+            -d '{"title":"iStoreOS 编译失败","content":"Cudy TR3000 编译失败\nhttps://github.com/cainaorun/istoreos-cudy-tr3000/actions/runs/${{ github.run_id }}","type":"text"}'
