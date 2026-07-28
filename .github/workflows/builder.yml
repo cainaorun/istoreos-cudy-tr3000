@@ -6,11 +6,11 @@ permissions:
 on:
   workflow_dispatch:
     inputs:
-      version:
-        description: '固件版本'
+      target:
+        description: Target
         required: false
         type: string
-        default: 'auto'
+        default: cudy_tr3000-v1
 
 jobs:
   build:
@@ -18,26 +18,43 @@ jobs:
     steps:
       - uses: actions/checkout@v4
 
-      - name: Install deps
-        run: sudo apt-get update -qq && sudo apt-get install -y --no-install-recommends build-essential g++ gawk gettext git libncurses-dev libssl-dev make python3 rsync subversion swig unzip wget xsltproc zlib1g-dev
+      - name: deps
+        run: |
+          sudo apt-get update -qq
+          sudo apt-get install -y --no-install-recommends build-essential g++ gawk gettext git libncurses-dev libssl-dev make python3 rsync subversion swig unzip wget xsltproc zlib1g-dev
 
-      - name: Clone source
-        run: git clone --depth 1 --single-branch -b openwrt-24.10-6.6 https://github.com/padavanonly/immortalwrt-mt798x-6.6.git openwrt
+      - name: clone
+        run: |
+          git clone --depth 1 --single-branch -b openwrt-24.10-6.6 https://github.com/padavanonly/immortalwrt-mt798x-6.6.git openwrt
 
-      - name: Copy files
-        run: if [ -d files ]; then cp -af files/* openwrt/files/ 2>/dev/null || true; fi
+      - name: copy_files
+        run: |
+          if [ -d files ]; then
+            cp -af files/* openwrt/files/ 2>/dev/null || true
+          fi
 
-      - name: Fix mirrors
+      - name: fix_mirrors
         run: |
           cd openwrt
-          python3 -c "
+          cat > /tmp/fix_mirrors.py << PYEND
 import json
-d=json.load(open('scripts/projectsmirrors.json'))
-d['@KERNEL']=['https://cdn.kernel.org/pub']
-json.dump(d,open('scripts/projectsmirrors.json','w'),indent=2)
-"
+with open('scripts/projectsmirrors.json') as f:
+    data = json.load(f)
+for key in list(data.keys()):
+    newlist = []
+    for url in data[key]:
+        if '.cn' not in url and '.tw' not in url and '.jp' not in url:
+            newlist.append(url)
+    if newlist:
+        data[key] = newlist
+data['@KERNEL'] = ['https://cdn.kernel.org/pub']
+with open('scripts/projectsmirrors.json', 'w') as f:
+    json.dump(data, f, indent=2)
+print('Mirrors fixed')
+PYEND
+          python3 /tmp/fix_mirrors.py
 
-      - name: Update feeds
+      - name: feeds
         run: |
           cd openwrt
           echo 'src-git store https://github.com/linkease/istore.git;main' >> feeds.conf.default
@@ -45,50 +62,35 @@ json.dump(d,open('scripts/projectsmirrors.json','w'),indent=2)
           ./scripts/feeds update -a
           ./scripts/feeds install -a
 
-      - name: Configure
+      - name: config
         run: |
           cd openwrt
           git clone --depth 1 https://github.com/jerrykuku/luci-theme-argon.git package/luci-theme-argon
           git clone --depth 1 https://github.com/jerrykuku/luci-app-argon-config.git package/luci-app-argon-config
           sed -i 's/luci-theme-bootstrap/luci-theme-argon/g' feeds/luci/collections/luci/Makefile
-          cp \${{ github.workspace }}/config/512m.config .config
-          make defconfig
+          cp CONFIG_PATH config
 
-      - name: Download sources
-        continue-on-error: true
+      - name: download
         run: cd openwrt && make download -j4 V=s
+        continue-on-error: true
         timeout-minutes: 120
 
-      - name: Compile firmware
+      - name: build
         run: cd openwrt && make -j4 V=s
         timeout-minutes: 240
 
-      - name: Upload artifact
-        if: always()
+      - name: artifact
         uses: actions/upload-artifact@v4
+        if: always()
         with:
-          name: iStoreOS-CudyTR3000
+          name: firmware
           path: openwrt/bin/targets/mediatek/filogic/
 
-      - name: Create Release
-        if: success()
+      - name: release
         uses: ncipollo/release-action@v1
-        with:
-          tag: build-\$(date +%Y%m%d-%H%M)
-          name: iStoreOS Cudy TR3000
-          artifacts: openwrt/bin/targets/mediatek/filogic/*.bin
-          token: \${{ secrets.GITHUB_TOKEN }}
-
-      - name: Notify success
         if: success()
-        run: |
-          curl -X POST "https://push.xrdp.fun:3443/api/push/e0eea2dc719f4ba8ba6fd443fc276463" \
-            -H "Content-Type: application/json" \
-            -d '{"title":"iStoreOS 编译成功","content":"Cudy TR3000 固件已发布\\nhttps://github.com/cainaorun/istoreos-cudy-tr3000/releases/tag/build-$(date +%Y%m%d-%H%M)","type":"text"}'
-
-      - name: Notify failure
-        if: failure()
-        run: |
-          curl -X POST "https://push.xrdp.fun:3443/api/push/e0eea2dc719f4ba8ba6fd443fc276463" \
-            -H "Content-Type: application/json" \
-            -d '{"title":"iStoreOS 编译失败","content":"Cudy TR3000 编译失败\\nhttps://github.com/cainaorun/istoreos-cudy-tr3000/actions/runs/${{ github.run_id }}","type":"text"}'
+        with:
+          tag: build
+          name: iStoreOS for Cudy TR3000
+          artifacts: openwrt/bin/targets/mediatek/filogic/*.bin
+          token: ${{ secrets.GITHUB_TOKEN }}
