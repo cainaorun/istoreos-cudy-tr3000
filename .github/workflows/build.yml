@@ -37,8 +37,20 @@ jobs:
         run: cd openwrt && make -j$(nproc) download
       - name: Build
         run: cd openwrt && make -j$(nproc) || make -j1 V=s
-      - name: Upload
-        uses: actions/upload-artifact@v4
+      - name: Create Release
+        run: |
+          cd openwrt/bin/targets/mediatek/filogic/
+          echo "iStoreOS for Cudy TR3000" > release.txt
+          echo "Build date: $(date '+%Y-%m-%d %H:%M')" >> release.txt
+      - name: Upload to Release
+        uses: ncipollo/release-action@v1
         with:
-          name: iStoreOS-CudyTR3000
-          path: openwrt/bin/targets/mediatek/filogic/
+          tag: build-$(date +%Y%m%d-%H%M)
+          name: iStoreOS Cudy TR3000 $(date +%Y%m%d)
+          body: |
+            iStoreOS for Cudy TR3000 自动编译
+            基于 padavanonly/immortalwrt-mt798x-6.6
+          artifacts: openwrt/bin/targets/mediatek/filogic/*
+          token: ${{ secrets.GITHUB_TOKEN }}
+          allowUpdates: true
+          removeArtifacts: true
