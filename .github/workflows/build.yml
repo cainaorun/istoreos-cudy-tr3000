@@ -10,29 +10,21 @@ env:
 
 jobs:
   build:
-    name: Build iStoreOS for Cudy TR3000
+    name: Build
     runs-on: ubuntu-22.04
     steps:
       - uses: actions/checkout@v4
-
       - name: Init
-        run: |
-          sudo apt-get update -qq
-          sudo apt-get install -y --no-install-recommends build-essential ccache g++ gawk gettext git libncurses-dev libssl-dev make python3 python3-setuptools rsync subversion swig unzip wget xsltproc zlib1g-dev
-
+        run: sudo apt-get update -qq && sudo apt-get install -y --no-install-recommends build-essential g++ gawk gettext git libncurses-dev libssl-dev make python3 rsync subversion swig unzip wget xsltproc zlib1g-dev
       - name: Clone
         run: git clone --depth 1 --single-branch -b $REPO_BRANCH $REPO_URL openwrt
-
       - name: Feeds
         run: |
           cd openwrt
-          cat >> feeds.conf.default << EOF
-src-git store https://github.com/linkease/istore.git;main
-src-git third https://github.com/jjm2473/openwrt-third.git;main
-EOF
+          echo 'src-git store https://github.com/linkease/istore.git;main' >> feeds.conf.default
+          echo 'src-git third https://github.com/jjm2473/openwrt-third.git;main' >> feeds.conf.default
           ./scripts/feeds update -a
           ./scripts/feeds install -a
-
       - name: Config
         run: |
           cd openwrt
@@ -41,15 +33,10 @@ EOF
           sed -i 's/luci-theme-bootstrap/luci-theme-argon/g' feeds/luci/collections/luci/Makefile
           cp /github/workspace/config/512m.config .config
           make defconfig
-
       - name: Download
         run: cd openwrt && make -j$(nproc) download
-
       - name: Build
-        run: |
-          cd openwrt
-          make -j$(nproc) || make -j1 V=s
-
+        run: cd openwrt && make -j$(nproc) || make -j1 V=s
       - name: Upload
         uses: actions/upload-artifact@v4
         with:
