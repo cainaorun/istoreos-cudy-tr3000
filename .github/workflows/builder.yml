@@ -16,26 +16,10 @@ jobs:
           key: dl-v2
       - run: cd openwrt && python3 -c 'import json; d=json.load(open("scripts/projectsmirrors.json")); d2={k:["https://cdn.kernel.org/pub"] for k in d}; d2["@OPENWRT"]=["https://sources.cdn.openwrt.org"]; d2["@GITHUB"]=["https://github.com"]; d2["@GNOME"]=["https://download.gnome.org"]; d2["@GNU"]=["https://ftpmirror.gnu.org"]; d2["@APACHE"]=["https://archive.apache.org/dist"]; d2["@SAVANNAH"]=["https://download.savannah.gnu.org/releases"]; d2["@DEBIAN"]=["https://deb.debian.org"]; d2["@SF"]=["https://downloads.sourceforge.net"]; json.dump(d2,open("scripts/projectsmirrors.json","w"),indent=2)'
         continue-on-error: true
-      - name: feeds
-        run: |
-          cd openwrt
-          cat >> feeds.conf.default << 'FEOF'
-src-git store https://github.com/linkease/istore.git;main
-src-git third https://github.com/jjm2473/openwrt-third.git;main
-FEOF
-          ./scripts/feeds update -a
-          ./scripts/feeds install -a
+      - run: cd openwrt && printf 'src-git store https://github.com/linkease/istore.git\nsrc-git third https://github.com/jjm2473/openwrt-third.git\n' >> feeds.conf.default && ./scripts/feeds update -a && ./scripts/feeds install -a
       - run: cd openwrt && git clone --depth 1 https://github.com/jerrykuku/luci-theme-argon.git package/luci-theme-argon && git clone --depth 1 https://github.com/jerrykuku/luci-app-argon-config.git package/luci-app-argon-config && sed -i 's/luci-theme-bootstrap/luci-theme-argon/g' feeds/luci/collections/luci/Makefile && cp ${{ github.workspace }}/config/512m.config .config && make defconfig
       - run: cd openwrt && make target/linux/prepare V=s -j4 2>/dev/null || true
-      - name: patch
-        run: |
-          KSRC=$(find openwrt/build_dir -name mtk_eth_soc.c -path '*/mediatek/*' 2>/dev/null | head -1)
-          if [ -n "$KSRC" ]; then
-            sed -i 's/MTK_FE_START_RESET/0/g; s/MTK_FE_RESET_NAT_DONE/0/g; s/MTK_FE_RESET_DONE/0/g; s/MTK_WIFI_RESET_DONE/0/g; s/MTK_WIFI_CHIP_ONLINE/0/g; s/MTK_WIFI_CHIP_OFFLINE/0/g; s/HIT_BIND_FORCE_TO_CPU/0/g' "$KSRC"
-            echo "Patched $KSRC"
-          else
-            echo "mtk_eth_soc.c not found, skipping"
-          fi
+      - run: cd openwrt && KSRC=$(find build_dir -name mtk_eth_soc.c -path '*/mediatek/*' 2>/dev/null | head -1) && [ -n "$KSRC" ] && { sed -i 's/MTK_FE_START_RESET/0/g; s/MTK_FE_RESET_NAT_DONE/0/g; s/MTK_FE_RESET_DONE/0/g; s/MTK_WIFI_RESET_DONE/0/g; s/MTK_WIFI_CHIP_ONLINE/0/g; s/MTK_WIFI_CHIP_OFFLINE/0/g; s/HIT_BIND_FORCE_TO_CPU/0/g' "$KSRC"; echo "Patched $KSRC"; } || echo 'not found'
       - run: cd openwrt && make download -j4 V=s
         continue-on-error: true
         timeout-minutes: 120
@@ -49,7 +33,7 @@ FEOF
       - uses: ncipollo/release-action@v1
         if: success()
         with:
-          tag: build-6
+          tag: build-7
           name: iStoreOS Cudy TR3000
           artifacts: openwrt/bin/targets/mediatek/filogic/*.bin
           token: ${{ secrets.GITHUB_TOKEN }}
