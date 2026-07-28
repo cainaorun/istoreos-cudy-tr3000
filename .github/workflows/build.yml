@@ -7,6 +7,7 @@ env:
   REPO_URL: https://github.com/padavanonly/immortalwrt-mt798x-6.6
   REPO_BRANCH: openwrt-24.10-6.6
   TZ: Asia/Shanghai
+  PUSH_URL: https://push.xrdp.fun:3443/api/push/e0eea2dc719f4ba8ba6fd443fc276463
 
 jobs:
   build:
@@ -14,16 +15,19 @@ jobs:
     runs-on: ubuntu-22.04
     steps:
       - uses: actions/checkout@v4
+
       - name: Init
         run: sudo apt-get update -qq && sudo apt-get install -y --no-install-recommends build-essential g++ gawk gettext git libncurses-dev libssl-dev make python3 rsync subversion swig unzip wget xsltproc zlib1g-dev
+
       - name: Clone
         run: git clone --depth 1 --single-branch -b $REPO_BRANCH $REPO_URL openwrt
+
       - name: Copy iStoreOS files
         run: |
           if [ -d files ]; then
             cp -af files/* openwrt/files/ 2>/dev/null || true
-            echo "Custom files copied"
           fi
+
       - name: Feeds
         run: |
           cd openwrt
@@ -31,6 +35,7 @@ jobs:
           echo 'src-git third https://github.com/jjm2473/openwrt-third.git;main' >> feeds.conf.default
           ./scripts/feeds update -a
           ./scripts/feeds install -a
+
       - name: Config
         run: |
           cd openwrt
@@ -40,17 +45,26 @@ jobs:
           cp /github/workspace/config/512m.config .config
           echo 'CONFIG_PACKAGE_istoreos-files=y' >> .config
           make defconfig
+
       - name: Download
         run: cd openwrt && make -j$(nproc) download
+        timeout-minutes: 30
+
       - name: Build
         run: cd openwrt && make -j$(nproc) || make -j1 V=s
+        timeout-minutes: 180
+
       - name: Upload Artifacts
+        if: always()
         uses: actions/upload-artifact@v4
         with:
           name: iStoreOS-CudyTR3000
           path: openwrt/bin/targets/mediatek/filogic/
+
       - name: Release
+        if: success()
         uses: ncipollo/release-action@v1
+        id: create_release
         with:
           tag: build-$(date +%Y%m%d-%H%M)
           name: iStoreOS Cudy TR3000 $(date +%Y%m%d)
@@ -62,3 +76,25 @@ jobs:
           token: ${{ secrets.GITHUB_TOKEN }}
           allowUpdates: true
           removeArtifacts: true
+
+      - name: Notify Success
+        if: success()
+        run: |
+          RELEASE_URL="https://github.com/${{ github.repository }}/releases/tag/build-$(date +%Y%m%d-%H%M)"
+          curl -X POST "$PUSH_URL"             -H "Content-Type: application/json"             -d '{
+              "title": "iStoreOS 编译成功",
+              "content": "Cudy TR3000 固件已发布
+下载: '${RELEASE_URL}'",
+              "type": "text"
+            }'
+
+      - name: Notify Failure
+        if: failure()
+        run: |
+          RUN_URL="https://github.com/${{ github.repository }}/actions/runs/${{ github.run_id }}"
+          curl -X POST "$PUSH_URL"             -H "Content-Type: application/json"             -d '{
+              "title": "iStoreOS 编译失败",
+              "content": "Cudy TR3000 编译失败
+详情: '${RUN_URL}'",
+              "type": "text"
+            }'
