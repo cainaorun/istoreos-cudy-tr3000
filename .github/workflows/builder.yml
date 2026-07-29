@@ -10,8 +10,13 @@ jobs:
     runs-on: self-hosted
     steps:
       - uses: actions/checkout@v4
-      - run: ccache -M 20G -s
-      - run: git clone --depth 1 --single-branch -b openwrt-24.10-6.6 https://github.com/padavanonly/immortalwrt-mt798x-6.6.git openwrt
+      - run: ccache -M 20G
+      - run: |
+          if [ -d openwrt/.git ]; then
+            cd openwrt && git pull --depth 1
+          else
+            git clone --depth 1 --single-branch -b openwrt-24.10-6.6 https://github.com/padavanonly/immortalwrt-mt798x-6.6.git openwrt
+          fi
       - run: if [ -d files ]; then cp -af files/* openwrt/files/ 2>/dev/null || true; fi
       - run: cd openwrt && echo 'src-git store https://github.com/linkease/istore.git;main' >> feeds.conf.default && echo 'src-git third https://github.com/jjm2473/openwrt-third.git;main' >> feeds.conf.default && ./scripts/feeds update -a && ./scripts/feeds install -a
       - run: cd openwrt && git clone --depth 1 https://github.com/jerrykuku/luci-theme-argon.git package/luci-theme-argon && git clone --depth 1 https://github.com/jerrykuku/luci-app-argon-config.git package/luci-app-argon-config && sed -i 's/luci-theme-bootstrap/luci-theme-argon/g' feeds/luci/collections/luci/Makefile && cp ${{ github.workspace }}/config/512m.config .config && make defconfig
