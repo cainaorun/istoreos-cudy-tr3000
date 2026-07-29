@@ -16,14 +16,20 @@ jobs:
       - uses: actions/cache@v4
         with:
           path: openwrt/dl
-          key: dl-v3
+          key: dl-v4
       - run: cd openwrt && python3 -c 'import json; d=json.load(open("scripts/projectsmirrors.json")); d2={k:["https://cdn.kernel.org/pub"] for k in d}; d2["@OPENWRT"]=["https://sources.cdn.openwrt.org"]; d2["@GITHUB"]=["https://github.com"]; json.dump(d2,open("scripts/projectsmirrors.json","w"),indent=2)'
         continue-on-error: true
-      - run: cd openwrt && printf "src-git store https://github.com/linkease/istore.git;main\nsrc-git third https://github.com/jjm2473/openwrt-third.git;main\n" >> feeds.conf.default && ./scripts/feeds update -a && ./scripts/feeds install -a
+      - run: cd openwrt && echo 'src-git store https://github.com/linkease/istore.git;main' >> feeds.conf.default && echo 'src-git third https://github.com/jjm2473/openwrt-third.git;main' >> feeds.conf.default && ./scripts/feeds update -a && ./scripts/feeds install -a
       - run: cd openwrt && git clone --depth 1 https://github.com/jerrykuku/luci-theme-argon.git package/luci-theme-argon && git clone --depth 1 https://github.com/jerrykuku/luci-app-argon-config.git package/luci-app-argon-config && sed -i 's/luci-theme-bootstrap/luci-theme-argon/g' feeds/luci/collections/luci/Makefile && cp ${{ github.workspace }}/config/512m.config .config && make defconfig
+      - name: verify
+        run: |
+          cd openwrt
+          echo "=== iStore packages ==="
+          grep -E 'luci-app-store|luci-theme-argon|luci-lib-taskd|luci-lib-xterm|taskd' .config
+          echo "=== Missing? ==="
+          grep 'is not set' .config | grep -iE 'store|taskd|xterm|argon' || echo 'all enabled!'
       - run: cd openwrt && make target/linux/prepare V=s -j4 2>/dev/null || true
-      - name: patch
-        run: F=$(find openwrt/build_dir -name mtk_eth_soc.c -path '*/mediatek/*' 2>/dev/null | head -1) && [ -n "$F" ] && python3 ${{ github.workspace }}/scripts/patch_mtk_eth.py "$F" || echo 'not found'
+      - run: F=$(find openwrt/build_dir -name mtk_eth_soc.c -path '*/mediatek/*' 2>/dev/null | head -1) && [ -n "$F" ] && python3 ${{ github.workspace }}/scripts/patch_mtk_eth.py "$F" || echo not found
       - run: cd openwrt && make download -j4 V=s
         continue-on-error: true
         timeout-minutes: 120
