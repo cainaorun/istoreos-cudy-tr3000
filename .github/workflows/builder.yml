@@ -7,40 +7,22 @@ permissions:
   contents: write
 jobs:
   build:
-    runs-on: self-hosted
+    runs-on: ubuntu-22.04
     steps:
       - uses: actions/checkout@v4
-      - run: |
-          git config --global http.postBuffer 524288000
-          git config --global http.lowSpeedLimit 0
-          git config --global http.lowSpeedTime 999999
-      - run: ccache -M 20G
-      - run: |
-          if [ -d openwrt/.git ]; then
-            cd openwrt && git pull --depth 1
-          else
-            git clone --depth 1 --single-branch -b openwrt-24.10-6.6 https://github.com/padavanonly/immortalwrt-mt798x-6.6.git openwrt
-          fi
+      - run: sudo apt-get update -qq && sudo apt-get install -y --no-install-recommends build-essential g++ gawk gettext git libncurses-dev libssl-dev make python3 rsync subversion swig unzip wget xsltproc zlib1g-dev
+      - run: git clone --depth 1 --single-branch -b openwrt-24.10-6.6 https://github.com/padavanonly/immortalwrt-mt798x-6.6.git openwrt
       - run: if [ -d files ]; then cp -af files/* openwrt/files/ 2>/dev/null || true; fi
-      - name: feeds
-        run: |
-          cd openwrt
-          echo 'src-git store https://github.com/linkease/istore.git;main' >> feeds.conf.default
-          for i in 1 2 3; do
-            ./scripts/feeds update -a && ./scripts/feeds install -a && break
-            echo "retry $i..."
-            sleep 10
-          done
+      - run: cd openwrt && echo 'src-git store https://github.com/linkease/istore.git;main' >> feeds.conf.default && ./scripts/feeds update -a && ./scripts/feeds install -a
       - run: cd openwrt && git clone --depth 1 https://github.com/jerrykuku/luci-theme-argon.git package/luci-theme-argon && git clone --depth 1 https://github.com/jerrykuku/luci-app-argon-config.git package/luci-app-argon-config && sed -i 's/luci-theme-bootstrap/luci-theme-argon/g' feeds/luci/collections/luci/Makefile && cp ${{ github.workspace }}/config/512m.config .config && make defconfig
-      - run: cd openwrt && grep -E 'luci-app-store|luci-theme-argon|CCACHE' .config
+      - run: cd openwrt && grep 'luci-app-store\|luci-theme-argon\|CCACHE' .config
       - run: cd openwrt && make target/linux/prepare V=s -j4 2>/dev/null || true
       - run: cd openwrt && F=$(find build_dir -name mtk_eth_soc.c -path '*/mediatek/*' 2>/dev/null | head -1) && [ -n "$F" ] && python3 ${{ github.workspace }}/scripts/patch_mtk_eth.py "$F" || echo not found
-      - run: cd openwrt && make download -j16 V=s
+      - run: cd openwrt && make download -j4 V=s
         continue-on-error: true
-        timeout-minutes: 60
-      - run: cd openwrt && make -j16 V=s
         timeout-minutes: 120
-      - run: ccache -s
+      - run: cd openwrt && make -j4 V=s
+        timeout-minutes: 240
       - uses: ncipollo/release-action@v1
         if: success()
         with:
