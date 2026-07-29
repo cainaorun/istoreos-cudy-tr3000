@@ -22,7 +22,28 @@ jobs:
       - run: cd openwrt && printf "src-git store https://github.com/linkease/istore.git;main\nsrc-git third https://github.com/jjm2473/openwrt-third.git;main\n" >> feeds.conf.default && ./scripts/feeds update -a && ./scripts/feeds install -a
       - run: cd openwrt && git clone --depth 1 https://github.com/jerrykuku/luci-theme-argon.git package/luci-theme-argon && git clone --depth 1 https://github.com/jerrykuku/luci-app-argon-config.git package/luci-app-argon-config && sed -i 's/luci-theme-bootstrap/luci-theme-argon/g' feeds/luci/collections/luci/Makefile && cp ${{ github.workspace }}/config/512m.config .config && make defconfig
       - run: cd openwrt && make target/linux/prepare V=s -j4 2>/dev/null || true
-      - run: cd openwrt && KSRC=$(find build_dir -name mtk_eth_soc.c -path '*/mediatek/*' 2>/dev/null | head -1) && [ -n "$KSRC" ] && { sed -i 's/MTK_FE_START_RESET/0/g; s/MTK_FE_RESET_NAT_DONE/0/g; s/MTK_FE_RESET_DONE/0/g; s/MTK_WIFI_RESET_DONE/0/g; s/MTK_WIFI_CHIP_ONLINE/0/g; s/MTK_WIFI_CHIP_OFFLINE/0/g; s/HIT_BIND_FORCE_TO_CPU/0/g' "$KSRC"; echo "Patched $KSRC"; } || echo not found
+      - name: patch mtk_eth
+        run: |
+          F=$(find openwrt/build_dir -name mtk_eth_soc.c -path '*/mediatek/*' 2>/dev/null | head -1)
+          if [ -n "$F" ]; then
+            python3 -c "
+import re
+with open('$F') as f:
+    c = f.read()
+c = re.sub(r'case MTK_WIFI_RESET_DONE:\s*.*?\s*break;', '', c, flags=re.DOTALL)
+c = re.sub(r'case MTK_WIFI_CHIP_ONLINE:\s*.*?\s*break;', '', c, flags=re.DOTALL)
+c = re.sub(r'case MTK_WIFI_CHIP_OFFLINE:\s*.*?\s*break;', '', c, flags=re.DOTALL)
+c = c.replace('MTK_FE_START_RESET', '0')
+c = c.replace('MTK_FE_RESET_NAT_DONE', '0')
+c = c.replace('MTK_FE_RESET_DONE', '0')
+c = c.replace('HIT_BIND_FORCE_TO_CPU', '0')
+with open('$F', 'w') as f:
+    f.write(c)
+print('Patched $F')
+"
+          else
+            echo "mtk_eth_soc.c not found"
+          fi
       - run: cd openwrt && make download -j4 V=s
         continue-on-error: true
         timeout-minutes: 120
